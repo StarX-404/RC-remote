@@ -1,0 +1,4 @@
+-keep class com.rcremote.model.** { *; }
+-keep class com.rcremote.bluetooth.** { *; }
+-keepclassmembers class * extends androidx.lifecycle.ViewModel { *; }
+-dontwarn kotlin.Unit
