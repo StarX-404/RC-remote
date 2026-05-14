@@ -69,17 +69,17 @@ class RCViewModel(app: Application) : AndroidViewModel(app), SensorEventListener
         viewModelScope.launch {
             combine(
                 _joystick, _dpad, _tilt, _turbo, _brake, _horn, _lights, _controlMode, _speedLimit
-            ) { arr ->
+            ) { joystick, dpad, tilt, turbo, brake, horn, lights, mode, limit ->
                 buildCommand(
-                    joystick = arr[0] as JoystickState,
-                    dpad = arr[1] as DPadDirection,
-                    tilt = arr[2] as TiltState,
-                    turbo = arr[3] as Boolean,
-                    brake = arr[4] as Boolean,
-                    horn = arr[5] as Boolean,
-                    lights = arr[6] as Boolean,
-                    mode = arr[7] as ControlMode,
-                    limit = arr[8] as Int
+                    joystick = joystick,
+                    dpad = dpad,
+                    tilt = tilt,
+                    turbo = turbo,
+                    brake = brake,
+                    horn = horn,
+                    lights = lights,
+                    mode = mode,
+                    limit = limit
                 )
             }.collect { cmd -> btManager.sendCommand(cmd) }
         }
@@ -112,8 +112,8 @@ class RCViewModel(app: Application) : AndroidViewModel(app), SensorEventListener
         val scale = limit / 100f
         val (throttle, steering) = when (mode) {
             ControlMode.JOYSTICK -> {
-                val t = (joystick.y * 100 * scale).roundToInt()
-                val s = (joystick.x * 100).roundToInt()
+                val t = (joystick.y * 100 * scale).roundToInt().coerceIn(-100, 100)
+                val s = (joystick.x * 100 * scale).roundToInt().coerceIn(-100, 100)
                 t to s
             }
             ControlMode.DPAD -> {
@@ -133,8 +133,8 @@ class RCViewModel(app: Application) : AndroidViewModel(app), SensorEventListener
             }
             ControlMode.TILT -> {
                 // pitch → throttle, roll → steering
-                val t = (tilt.pitch.coerceIn(-45f, 45f) / 45f * 100 * scale).roundToInt()
-                val s = (tilt.roll.coerceIn(-45f, 45f) / 45f * 100).roundToInt()
+                val t = (tilt.pitch.coerceIn(-45f, 45f) / 45f * 100 * scale).roundToInt().coerceIn(-100, 100)
+                val s = (tilt.roll.coerceIn(-45f, 45f) / 45f * 100 * scale).roundToInt().coerceIn(-100, 100)
                 t to s
             }
         }
@@ -151,23 +151,31 @@ class RCViewModel(app: Application) : AndroidViewModel(app), SensorEventListener
     // --- Telemetry parser ---
     // Expected format from car: "SPD:42,BAT:85,GEAR:DRIVE"
     private fun parseTelemetry(line: String) {
-        val map = line.split(",").mapNotNull {
-            val parts = it.split(":")
-            if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
-        }.toMap()
-        _carState.value = _carState.value.copy(
-            speedKmh = map["SPD"]?.toIntOrNull() ?: _carState.value.speedKmh,
-            rcBatteryPct = map["BAT"]?.toIntOrNull() ?: _carState.value.rcBatteryPct,
-            gear = map["GEAR"] ?: _carState.value.gear,
-            isConnected = true
-        )
+        try {
+            val map = line.split(",").mapNotNull {
+                val parts = it.split(":")
+                if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
+            }.toMap()
+            
+            _carState.value = _carState.value.copy(
+                speedKmh = map["SPD"]?.toIntOrNull()?.coerceIn(0, 300) ?: _carState.value.speedKmh,
+                rcBatteryPct = map["BAT"]?.toIntOrNull()?.coerceIn(0, 100) ?: _carState.value.rcBatteryPct,
+                gear = map["GEAR"] ?: _carState.value.gear,
+                isConnected = true
+            )
+        } catch (e: Exception) {
+            // Silently ignore malformed telemetry to prevent crashes
+        }
     }
 
     // --- Tilt sensor ---
     private fun registerTilt() {
-        rotationSensor?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        if (rotationSensor == null) {
+            // Fallback to joystick if tilt sensor is not available
+            _controlMode.value = ControlMode.JOYSTICK
+            return
         }
+        sensorManager.registerListener(this, rotationSensor, SensorManager.SENSOR_DELAY_GAME)
     }
 
     private fun unregisterTilt() = sensorManager.unregisterListener(this)
