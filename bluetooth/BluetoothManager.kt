@@ -29,6 +29,7 @@ class RCBluetoothManager(private val ctx: Context) {
     private val adapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     private var socket: BluetoothSocket? = null
     private var writeJob: Job? = null
+    private var readJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val _state = MutableStateFlow<BtState>(BtState.Disconnected)
@@ -62,12 +63,15 @@ class RCBluetoothManager(private val ctx: Context) {
                 launchWriteLoop(s)
             } catch (e: IOException) {
                 _state.value = BtState.Error("Connection failed: ${e.message}")
+                try { socket?.close() } catch (_: IOException) {}
+                socket = null
             }
         }
     }
 
     fun disconnect() {
         writeJob?.cancel()
+        readJob?.cancel()
         try { socket?.close() } catch (_: IOException) {}
         socket = null
         _state.value = BtState.Disconnected
@@ -85,7 +89,9 @@ class RCBluetoothManager(private val ctx: Context) {
                 .sample(20L)
                 .collect { cmd ->
                     try {
-                        s.outputStream.write(cmd.toCommand().toByteArray())
+                        val data = cmd.toCommand().toByteArray()
+                        s.outputStream.write(data)
+                        s.outputStream.flush()
                     } catch (e: IOException) {
                         _state.value = BtState.Error("Write error: ${e.message}")
                         cancel()
@@ -95,18 +101,47 @@ class RCBluetoothManager(private val ctx: Context) {
     }
 
     private fun launchReadLoop(s: BluetoothSocket) {
-        scope.launch {
+        readJob = scope.launch {
             val buf = ByteArray(256)
             val sb = StringBuilder()
+            val maxBufferSize = 1024
+            
             while (isActive) {
                 try {
                     val n = s.inputStream.read(buf)
+                    
+                    // Check for socket closed (n <= 0)
+                    if (n <= 0) {
+                        if (isActive) {
+                            _state.value = BtState.Error("Connection lost")
+                        }
+                        break
+                    }
+                    
+                    // Buffer overflow protection
+                    if (n > buf.size) {
+                        _state.value = BtState.Error("Buffer overflow detected")
+                        break
+                    }
+                    
                     sb.append(String(buf, 0, n))
+                    
+                    // Prevent excessive memory usage
+                    if (sb.length > maxBufferSize) {
+                        sb.delete(0, sb.length / 2)
+                    }
+                    
                     // Emit complete lines
                     var idx: Int
                     while (sb.indexOf("\n").also { idx = it } != -1) {
                         val line = sb.substring(0, idx).trim()
-                        if (line.isNotEmpty()) _incoming.emit(line)
+                        if (line.isNotEmpty()) {
+                            try {
+                                _incoming.emit(line)
+                            } catch (e: Exception) {
+                                // Ignore backpressure issues
+                            }
+                        }
                         sb.delete(0, idx + 1)
                     }
                 } catch (e: IOException) {
