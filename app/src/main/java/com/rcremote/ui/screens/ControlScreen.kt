@@ -446,4 +446,3 @@ private fun Indicator(label: String, color: Color) {
     }
 }
 
-private val Dp = androidx.compose.ui.unit.Dp
