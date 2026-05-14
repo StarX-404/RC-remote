@@ -110,7 +110,7 @@ private fun TopTriggerBar(
             .fillMaxWidth()
             .height(36.dp)
             .background(BgStrip)
-            .border(Dp = 0.5.dp, color = Border, shape = RoundedCornerShape(0.dp)),
+            .border(0.5.dp, Border, RoundedCornerShape(0.dp)),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // L2 Trigger
