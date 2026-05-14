@@ -2,9 +2,9 @@ name: Build RC Remote APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, develop ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, develop ]
   workflow_dispatch:
 
 jobs:
@@ -25,16 +25,6 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
 
@@ -43,7 +33,7 @@ jobs:
         with:
           name: rc-remote-debug-apk
           path: app/build/outputs/apk/debug/*.apk
-          retention-days: 14
+          retention-days: 30
 
       - name: Build release APK (unsigned)
         run: ./gradlew assembleRelease --stacktrace
@@ -53,4 +43,28 @@ jobs:
         with:
           name: rc-remote-release-apk
           path: app/build/outputs/apk/release/*.apk
-          retention-days: 14
+          retention-days: 30
+
+      - name: Run Lint checks
+        run: ./gradlew lint --stacktrace
+        continue-on-error: true
+
+      - name: Run Unit Tests
+        run: ./gradlew test --stacktrace
+        continue-on-error: true
+
+      - name: Upload Lint Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-reports
+          path: app/build/reports/lint-results*.html
+          retention-days: 7
+
+      - name: Upload Test Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: app/build/reports/tests/
+          retention-days: 7
