@@ -21,6 +21,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
+        id: setup-java
         uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -29,8 +30,8 @@ jobs:
 
       - name: Force JDK 17 for all next steps
         run: |
-          echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "$GITHUB_ENV"
-          echo "ORG_GRADLE_JAVA_HOME=${JAVA_HOME_17_X64}" >> "$GITHUB_ENV"
+          echo "JAVA_HOME=${{ steps.setup-java.outputs.path }}" >> "$GITHUB_ENV"
+          echo "ORG_GRADLE_JAVA_HOME=${{ steps.setup-java.outputs.path }}" >> "$GITHUB_ENV"
 
       - name: Verify Java runtime
         run: |
