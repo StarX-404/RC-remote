@@ -28,16 +28,12 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Force JDK 17 for all next steps
-        run: |
-          echo "JAVA_HOME=${{ steps.setup-java.outputs.path }}" >> "$GITHUB_ENV"
-          echo "ORG_GRADLE_JAVA_HOME=${{ steps.setup-java.outputs.path }}" >> "$GITHUB_ENV"
-
       - name: Verify Java runtime
         run: |
           java -version
           echo "JAVA_HOME=$JAVA_HOME"
           ./gradlew --version
+          ./gradlew -q javaToolchains || true
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -53,7 +49,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" assembleDebug --stacktrace
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -63,7 +59,7 @@ jobs:
           retention-days: 30
 
       - name: Build release APK (unsigned)
-        run: ./gradlew assembleRelease --stacktrace
+        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" assembleRelease --stacktrace
 
       - name: Upload release APK
         uses: actions/upload-artifact@v4
@@ -73,11 +69,11 @@ jobs:
           retention-days: 30
 
       - name: Run Lint checks
-        run: ./gradlew lint --stacktrace
+        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" lint --stacktrace
         continue-on-error: true
 
       - name: Run Unit Tests
-        run: ./gradlew test --stacktrace
+        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" test --stacktrace
         continue-on-error: true
 
       - name: Upload Lint Reports
